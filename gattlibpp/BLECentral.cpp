@@ -386,7 +386,7 @@ bool BLECentral::connect(const UUID & devId, const ConnectionParams & parameters
 		devDets = deviceDetails(devId);
 	}
 	connected_to = devId;
-	if (gattlib_connect_async(NULL, devId.c_str(),
+	if (gattlib_async_connect(NULL, devId.c_str(),
 						(uint8_t)parameters.destinationType,
 						parameters.security,
 						parameters.PSM,
