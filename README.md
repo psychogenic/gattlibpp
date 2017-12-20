@@ -1,9 +1,9 @@
 GattLib++
 =========
 
-Copyright (C) 2017 Pat Deegan, [text link](https://psychogenic.com)
+Copyright (C) 2017 Pat Deegan, [psychogenic.com](https://psychogenic.com)
 
-GattLib++ is a C++ wrapper around the ([text link with title](https://github.com/psychogenic/gattlib "async version of")) the [text link with title](https://github.com/labapart/gattlib "GattLib library").
+GattLib++ is a C++ wrapper around the ([async version of](https://github.com/psychogenic/gattlib "async version")) the [GattLib library](https://github.com/labapart/gattlib "GattLib library").
 
 GattLib and GattLib++ allow access the to Generic Attribute Profile (GATT) protocol of BLE (Bluetooth Low Energy) devices, to 
 	
