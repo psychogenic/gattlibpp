@@ -238,7 +238,7 @@ void BLECentral::stopAllNotifications(const UUID & device) {
 	}
 	dev->foreachCharacteristic([this, dev](Characteristic::Details & aChar) {
 		if (aChar.registeredForNotifs) {
-			this->stopNotification(dev->id, AnyService, aChar.id);
+			this->stopNotification(dev->id, Service::AnyService, aChar.id);
 		}
 	});
 
@@ -314,7 +314,7 @@ bool BLECentral::scan(SecondsValue runSeconds,
 	is_scanning = true;
 	return true;
 }
-bool BLECentral::scan(const ServiceList & services, SecondsValue runSeconds,
+bool BLECentral::scan(const Service::UUIDList & services, SecondsValue runSeconds,
 		Callbacks::SuccessNotification scanCompleted,
 		Callbacks::Discovered deviceDiscoveredCb, Callbacks::Error failure) {
 
@@ -328,7 +328,7 @@ bool BLECentral::startScan(Callbacks::SuccessNotification scanCompleted,
 }
 
 
-bool BLECentral::startScan(const ServiceList & services,
+bool BLECentral::startScan(const Service::UUIDList & services,
 		Callbacks::SuccessNotification scanCompleted,
 		Callbacks::Discovered deviceDiscoveredCb, Callbacks::Error failure) {
 
@@ -432,7 +432,7 @@ bool BLECentral::disconnect(const UUID& devId,
 
 }
 
-bool BLECentral::read(const UUID& device, const Service& service_uuid,
+bool BLECentral::read(const UUID& device, const Service::UUID& service_uuid,
 		const Characteristic::UUID& characteristic_uuid,
 		Callbacks::IncomingData inData, Callbacks::Error failure) {
 
@@ -474,7 +474,7 @@ bool BLECentral::read(const UUID& device,
 
 
 
-bool BLECentral::write(const UUID& device, const Service& service_uuid,
+bool BLECentral::write(const UUID& device, const Service::UUID& service_uuid,
 		const Characteristic::UUID& characteristic_uuid,
 		const BinaryBuffer& value, Callbacks::SuccessNotification succ,
 		Callbacks::Error failure) {
@@ -546,7 +546,7 @@ bool BLECentral::write(const UUID& device,
 
 
 bool BLECentral::writeWithoutResponse(const UUID& device,
-		const Service& service_uuid,
+		const Service::UUID& service_uuid,
 		const Characteristic::UUID& characteristic_uuid,
 		const BinaryBuffer& value, Callbacks::SuccessNotification succ,
 		Callbacks::Error failure) {
@@ -562,7 +562,7 @@ bool BLECentral::writeWithoutResponse(const UUID& device,
 }
 
 bool BLECentral::startNotification(const UUID& device,
-		const Service& service_uuid,
+		const Service::UUID& service_uuid,
 		const Characteristic::UUID& characteristic_uuid,
 		Callbacks::IncomingData inDataCallback, Callbacks::Error failure) {
 
@@ -637,7 +637,7 @@ bool BLECentral::startNotification(const UUID& device,
 }
 
 bool BLECentral::stopNotification(const UUID& device,
-		const Service& service_uuid, const Characteristic::UUID& characteristic_uuid,
+		const Service::UUID& service_uuid, const Characteristic::UUID& characteristic_uuid,
 		Callbacks::SuccessNotification succ, Callbacks::Error failure) {
 
 
@@ -714,8 +714,7 @@ bool BLECentral::isConnected(const UUID& device,
 	return true;
 }
 
-bool BLECentral::isEnabled(const UUID& device,
-		Callbacks::SuccessNotification succ, Callbacks::Error failure) {
+bool BLECentral::isEnabled(Callbacks::SuccessNotification succ, Callbacks::Error failure) {
 
 	BLECENTRAL_ENSURE_ADAPTER_AVAIL(failure);
 	reportQueue.push_back(succ);
@@ -772,6 +771,7 @@ void BLECentral::readDataReceived(const uint8_t * buf, size_t len) {
 
 
 void BLECentral::deviceDiscovered(const Discovery::Device & dev) {
+	namesCache[dev.id] = dev.name;
 	if (callbacks.discovered) {
 		(callbacks.discovered)(dev);
 	}
@@ -785,52 +785,115 @@ void BLECentral::scanCompleted() {
 
 }
 
+bool BLECentral::performServiceDiscovery(Device::Details * onDevice) {
+	char uuid_str[BLECENTRAL_UUIDSTRING_MAX_LENGTH + 1];
+	int i;
+	gattlib_primary_service_t * services;
+	int services_count;
 
+	if (gattlib_discover_primary(onDevice->connection, &services,
+			&services_count) != 0) {
 
-bool BLECentral::performDiscovery(Device::Details * onDevice) {
+		BLECNTL_ERRORLN("Failed to discover services");
+		return false;
+	}
 
+	DEVDETS_LOCKGUARD_BEGINBLOCK(onDevice, "performServDisc");
+	onDevice->clearServices();
+
+	for (i = 0; i < services_count; i++) {
+
+		if (gattlib_uuid_to_string(&(services[i].uuid), uuid_str,
+		BLECENTRAL_UUIDSTRING_MAX_LENGTH) == 0) {
+			BLECNTL_DEBUGLN("Adding service " << uuid_str);
+
+			onDevice->addService(uuid_str, services[i]);
+		} else {
+			BLECNTL_ERRORLN("Could not convert char uuid to str??");
+		}
+	}
+	DEVDETS_LOCKGUARD_ENDBLOCK();
+
+	free(services);
+
+	return true;
+}
+
+bool BLECentral::performCharacteristicsDiscovery(Device::Details * onDevice) {
 	gattlib_characteristic_t* characteristics;
 	int i, characteristics_count;
 	char uuid_str[BLECENTRAL_UUIDSTRING_MAX_LENGTH + 1];
-	if (onDevice->discovery_done) {
-		BLECNTL_DEBUGLN("Discovery already done");
-		return true;
-	}
 
 
-	if (gattlib_discover_char(onDevice->connection,
-			&characteristics, &characteristics_count) != 0) {
+	if (gattlib_discover_char(onDevice->connection, &characteristics,
+			&characteristics_count) != 0) {
 		BLECNTL_ERRORLN("Failed to discover characteristics");
 
 		return false;
 	}
 
+	DEVDETS_LOCKGUARD_BEGINBLOCK(onDevice, "performCharDisc");
+	onDevice->clearCharacteristics();
+	for (i = 0; i < characteristics_count; i++) {
+		if (gattlib_uuid_to_string(&characteristics[i].uuid, uuid_str,
+		BLECENTRAL_UUIDSTRING_MAX_LENGTH) == 0) {
+			BLECNTL_DEBUGLN("Adding characteristic " << uuid_str);
 
-
-	DEVDETS_LOCKGUARD_BEGINBLOCK(onDevice, "performDisc");
-
-		for (i = 0; i < characteristics_count; i++) {
-			if (gattlib_uuid_to_string(&characteristics[i].uuid, uuid_str,
-						BLECENTRAL_UUIDSTRING_MAX_LENGTH) == 0) {
-				BLECNTL_DEBUGLN("Adding characteristic " << uuid_str);
-
-				onDevice->addCharacteristic(uuid_str, characteristics[i]);
-			} else {
-				BLECNTL_ERRORLN("Could not convert char uuid to str??");
-			}
-
+			onDevice->addCharacteristic(uuid_str, characteristics[i]);
+		} else {
+			BLECNTL_ERRORLN("Could not convert char uuid to str??");
 		}
+
+	}
 	DEVDETS_LOCKGUARD_ENDBLOCK();
-	free(characteristics);
+	free (characteristics);
+
+	return true;
+}
+bool BLECentral::performDiscovery(Device::Details * onDevice) {
+
+	if (onDevice->discovery_done) {
+		BLECNTL_DEBUGLN("Discovery already done");
+		return true;
+	}
+	if ( ! performServiceDiscovery(onDevice)) {
+		return false;
+	}
+
+	if (! performCharacteristicsDiscovery(onDevice)) {
+		return false;
+	}
+
 	onDevice->discovery_done = true;
 	return true;
 
 }
 
 
+Service::List BLECentral::servicesFor(const UUID & device) {
+	Service::List retList;
+
+	Device::Details * dets = deviceDetails(device);
+
+	if (! (dets && dets->discovery_done) ) {
+		return retList;
+	}
+
+	for (Device::ServicesMap::const_iterator iter = dets->services.begin();
+			iter != dets->services.end();
+			iter++)
+	{
+		const Service::Details & sd = (*iter).second;
+		retList.push_back(sd);
+	}
+
+	return retList;
+
+
+}
 Characteristic::List BLECentral::characteristicsFor(const UUID & device) {
 	Characteristic::List retList;
-	Device::Details * dets = deviceDetails(connected_to);
+	Device::Details * dets = deviceDetails(device);
 
 	if (! (dets && dets->discovery_done) ) {
 		return retList;
@@ -845,33 +908,52 @@ Characteristic::List BLECentral::characteristicsFor(const UUID & device) {
 	}
 
 	return retList;
+}
 
+void BLECentral::autoDiscoverServicesStep(Device::Details * onDevice)
+{
+
+	BLECNTL_DEBUGLN("doing service discovery, yeah");
+	performServiceDiscovery(onDevice);
+	reportQueue.push_back([this, onDevice](){
+		autoDiscoverCharacteristicsStep(onDevice);
+	});
 
 }
+
+void BLECentral::autoDiscoverCharacteristicsStep(Device::Details * onDevice) {
+	BLECNTL_DEBUGLN("doing char discovery, yeah");
+	performCharacteristicsDiscovery(onDevice);
+	Callbacks::SuccessNotification succ = callbacks.success;
+	onDevice->discovery_done = true;
+	reportQueue.push_back([succ]() {
+		if (succ) {
+			BLECNTL_DEBUGLN("Calling dev conn'ed cb");
+
+			succ();
+		} else {
+			BLECNTL_DEBUGLN("No dev conn'ed cb to call");
+		}
+	});
+}
+
 void BLECentral::deviceConnected(gatt_connection_t* connection) {
 	Device::Details * dets = deviceDetails(connected_to);
 
+	BLECNTL_DEBUGLN("Connected!");
 	dets->connection = connection;
 	if (dets->connection) {
-
-
-		Callbacks::SuccessNotification succ = callbacks.success;
 		if (auto_discover) {
-
-			performDiscovery(dets);
-			reportQueue.push_back([succ, this](){
-
-				if (succ) {
-					BLECNTL_DEBUGLN("Calling dev conn'ed cb");
-					succ();
-				} else {
-					BLECNTL_DEBUGLN("No dev conn'ed cb to call");
-				}
+			BLECNTL_DEBUGLN("Will auto discover...");
+			// we break up the discovery into multiple steps, as
+			// these are synchronous and potentially slow
+			reportQueue.push_back([this, dets](){
+				// discover services, the push
+				autoDiscoverServicesStep(dets);
 			});
 		} else {
 			currentOpCompleted();
 		}
-
 
 	} else {
 		BLECENTRAL_TRIGGER_CB_IFSET(callbacks.failure, "deviceConnected() callback called with empty conn");
@@ -957,7 +1039,9 @@ void BLECentral::handleNotification(const Characteristic::UUID & charUUID,
 
 
 
-
+const DeviceName & BLECentral::deviceName(const UUID & devUUID) {
+	return namesCache[devUUID];
+}
 
 
 

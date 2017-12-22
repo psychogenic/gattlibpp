@@ -32,6 +32,8 @@ namespace Device {
 typedef std::map<Characteristic::UUID, Callbacks::IncomingNotification> NotificationHandlersMap;
 typedef std::map<Characteristic::UUID, Characteristic::Details> CharacteristicsMap;
 
+typedef std::map<Service::UUID, Service::Details> ServicesMap;
+
 typedef struct DeviceDetailsStruct {
 
 	DeviceDetailsStruct();
@@ -40,6 +42,16 @@ typedef struct DeviceDetailsStruct {
 	bool hasNotificationHandlerFor(const Characteristic::UUID & uuid);
 	Callbacks::IncomingNotification notificationHandler(const Characteristic::UUID & uuid);
 	void setNotificationHandler(const Characteristic::UUID & forUUID, Callbacks::IncomingNotification hndler);
+
+	bool addService(const Service::UUID & uuid,
+			const gattlib_primary_service_t & gl_serv);
+	bool hasService(const Service::UUID & uuid);
+	Service::Details & service(const Service::UUID & uuid);
+	void foreachService(std::function<void(Service::Details &)> doOp);
+
+	void clearServices();
+
+
 
 	bool addCharacteristic(const Characteristic::UUID & uuid,
 			const gattlib_characteristic_t & gl_char);
@@ -50,11 +62,14 @@ typedef struct DeviceDetailsStruct {
 
 	void foreachCharacteristic(std::function<void(Characteristic::Details &)> doOp);
 
+	void clearCharacteristics();
+
 	UUID id;
 	gatt_connection_t* connection;
 	bool discovery_done;
 	uint8_t num_registered_for_notifs;
 
+	ServicesMap services;
 	CharacteristicsMap characteristics;
 	NotificationHandlersMap notifHandlers;
 

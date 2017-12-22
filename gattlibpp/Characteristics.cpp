@@ -25,24 +25,27 @@
 
 namespace Gattlib {
 
-Service AnyService;
 
 namespace Characteristic {
 CharDetailsStruct::CharDetailsStruct() : valid(false), registeredForNotifs(false) {
 
 }
-CharDetailsStruct::CharDetailsStruct(const ::Gattlib::UUID & devId, const gattlib_characteristic_t  & char_desc) :
+CharDetailsStruct::CharDetailsStruct(const ::Gattlib::UUID & devId,
+		const UUID & charUUID,
+		const gattlib_characteristic_t  & char_desc) :
 		deviceId(devId),
 		valid(false),
 		registeredForNotifs(false)
 {
-	char cuuid[BLECENTRAL_UUIDSTRING_MAX_LENGTH + 1] = {0,};
+	// char cuuid[BLECENTRAL_UUIDSTRING_MAX_LENGTH + 1] = {0,};
 	gl_uuid = char_desc.uuid;
+	/*
 	if ( gattlib_uuid_to_string(&(gl_uuid), cuuid, BLECENTRAL_UUIDSTRING_MAX_LENGTH) != 0) {
 		return;
 	}
+	*/
 
-	id = std::string(cuuid);
+	id = charUUID;
 	BLECNTL_DEBUGLN("Constructed char " << id << " with props " << (int)char_desc.properties);
 	Property::Value possVals[] = {
 

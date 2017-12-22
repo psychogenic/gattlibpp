@@ -41,6 +41,37 @@ Callbacks::IncomingNotification Details::notificationHandler(const Characteristi
 }
 
 
+bool Details::addService(const Service::UUID & uuid,
+		const gattlib_primary_service_t & gl_serv) {
+		Service::Details sd(id, uuid, gl_serv);
+
+		services.insert(ServicesMap::value_type(uuid, sd));
+		return true;
+
+}
+void Details::clearServices() {
+	services.clear();
+}
+
+bool Details::hasService(const Service::UUID & uuid) {
+	return services.find(uuid) != services.end();
+}
+Service::Details & Details::service(const Service::UUID & uuid) {
+	ServicesMap::iterator iter = services.find(uuid);
+	return (*iter).second;
+}
+void Details::foreachService(std::function<void(Service::Details &)> doOp) {
+
+	for (ServicesMap::iterator iter = services.begin(); iter != services.end();
+			iter++)
+	{
+		doOp((*iter).second);
+	}
+}
+
+void Details::clearCharacteristics(){
+	characteristics.clear();
+}
 void Details::foreachCharacteristic(std::function<void(Characteristic::Details &)> doOp) {
 
 	for (CharacteristicsMap::iterator iter = characteristics.begin(); iter != characteristics.end();
@@ -51,7 +82,7 @@ void Details::foreachCharacteristic(std::function<void(Characteristic::Details &
 }
 bool Details::addCharacteristic(const Characteristic::UUID & uuid,
 		const gattlib_characteristic_t & gl_char) {
-	Characteristic::Details cd(id, gl_char);
+	Characteristic::Details cd(id, uuid, gl_char);
 
 	if (cd.valid) {
 		characteristics.insert(CharacteristicsMap::value_type(uuid, cd));

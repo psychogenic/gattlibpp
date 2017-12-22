@@ -30,6 +30,7 @@ pkg_search_module(GATTLIB REQUIRED gattlib)
 include_directories(. ${CMAKE_CURRENT_BINARY_DIR})
 
 set(gattlibpp_SRCS BLECentral.cpp  
+	         Services.cpp
                  Characteristics.cpp
                  DeviceDetails.cpp)
 

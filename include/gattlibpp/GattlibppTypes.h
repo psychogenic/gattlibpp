@@ -32,11 +32,9 @@ typedef void* AdapterPtr;
 
 typedef std::string ErrorMessage;
 typedef std::string UUID;
-typedef UUID Service;
+typedef std::string DeviceName;
 
-extern Service AnyService;
 
-typedef std::vector<Service> ServiceList;
 
 typedef uint16_t TimeValue;
 typedef TimeValue SecondsValue;
@@ -49,14 +47,14 @@ typedef BinaryBuffer AdvertisingBuffer;
 namespace Discovery {
 
 typedef struct DiscDeviceStruct{
-	Service name;
+	DeviceName name;
 	UUID id;
 	RSSIValue rssi;
 	AdvertisingBuffer advertising;
 
 	DiscDeviceStruct() : rssi(0) {}
 
-	DiscDeviceStruct(const UUID & uid, const Service & devName, RSSIValue rssiVal=0) :
+	DiscDeviceStruct(const UUID & uid, const DeviceName & devName, RSSIValue rssiVal=0) :
 		name(devName), id(uid), rssi(rssiVal) {
 
 	}
@@ -83,6 +81,31 @@ typedef std::function<void(const BinaryBuffer & data)> IncomingNotification;
 typedef std::vector<QueuedOp> Queue;
 
 } /* namespace Callbacks */
+
+namespace Service {
+
+typedef ::Gattlib::UUID		UUID;
+
+extern UUID AnyService;
+
+typedef struct ServDetailsStruct {
+	UUID 			id;
+	::Gattlib::UUID	deviceId;
+	uuid_t			gl_uuid; // gattlib uuid
+	gattlib_primary_service_t	gl_service;
+
+	ServDetailsStruct() ;
+	ServDetailsStruct(const ::Gattlib::UUID & devId,
+			const UUID & servUUID,
+			const gattlib_primary_service_t  & glservice) ;
+
+} Details;
+
+typedef std::vector<UUID> UUIDList;
+typedef std::vector<Details> List;
+
+
+}
 
 
 namespace Characteristic {
@@ -114,7 +137,9 @@ typedef struct CharDetailsStruct {
 	uuid_t			gl_uuid; // gattlib uuid
 
 	CharDetailsStruct() ;
-	CharDetailsStruct(const ::Gattlib::UUID & devId, const gattlib_characteristic_t  & char_desc) ;
+	CharDetailsStruct(const ::Gattlib::UUID & devId,
+			const UUID & charUUID,
+			const gattlib_characteristic_t  & char_desc) ;
 
 	bool supports(Property::Value p) const;
 	bool supportSubscriptions() const;

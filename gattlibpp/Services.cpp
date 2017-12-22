@@ -1,7 +1,7 @@
 /*
- * BLECentralConfig.h
+ * Services.cpp
  *
- *  Created on: Dec 18, 2017
+ *  Created on: Dec 21, 2017
  *        Copyright (C) 2017 Pat Deegan, https://psychogenic.com
  *  This file is part of GattLib++.
  *
@@ -19,18 +19,37 @@
  *  along with GattLib++.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef INCLUDES_BLECENTRALCONFIG_H_
-#define INCLUDES_BLECENTRALCONFIG_H_
-
-#define BLECENTRAL_DEBUG_ENABLE
-
-#define BLECENTRAL_THREADSAFE
-
-#define BLECENTRAL_AUTODISCOVER_ON_CONNECT_DEFAULT		true
-
-#define BLECENTRAL_UUIDSTRING_MAX_LENGTH	40
-
-#define BLECENTRAL_PLATFORM_UNIX
+#include "../include/gattlibpp/BLECentralDebug.h"
+#include "../include/gattlibpp/GattlibppExtInc.h"
+#include "../include/gattlibpp/GattlibppTypes.h"
 
 
-#endif /* INCLUDES_BLECENTRALCONFIG_H_ */
+namespace Gattlib {
+
+
+
+
+namespace Service {
+
+UUID AnyService;
+
+ServDetailsStruct::ServDetailsStruct() {
+}
+
+
+ServDetailsStruct::ServDetailsStruct(const ::Gattlib::UUID & devId,
+		const UUID & servUUID,
+		const gattlib_primary_service_t  & glservice) {
+	deviceId = devId;
+	id = servUUID;
+	gl_service = glservice;
+	gl_uuid = glservice.uuid;
+
+
+}
+
+
+}
+}
+
+

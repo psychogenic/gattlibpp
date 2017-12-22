@@ -23,6 +23,9 @@
 #define INCLUDES_BLECENTRAL_H_
 #include "../gattlibpp/DeviceDetails.h"
 #include "../gattlibpp/GattlibppTypes.h"
+
+#include <queue>
+#include <list>
 namespace Gattlib {
 
 
@@ -93,6 +96,7 @@ typedef struct ConnectionParamsStruct {
 
 
 typedef std::map<UUID, Device::Details> 	DeviceMap;
+typedef std::map<UUID, DeviceName>			DeviceNamesMap;
 
 class BLECentral {
 public:
@@ -143,7 +147,7 @@ public:
 	/*
 	 * scan -- starts a scan and with a specified timeout (or until stopScan)
 	 */
-	bool scan(const ServiceList & services, SecondsValue runSeconds,
+	bool scan(const Service::UUIDList & services, SecondsValue runSeconds,
 			Callbacks::SuccessNotification scanCompleted,
 			Callbacks::Discovered deviceDiscoveredCb, Callbacks::Error failure=NULL);
 
@@ -159,7 +163,7 @@ public:
 	bool startScan(Callbacks::SuccessNotification scanCompleted,
 			Callbacks::Discovered deviceDiscoveredCb, Callbacks::Error failure=NULL);
 
-	bool startScan(const ServiceList & services,
+	bool startScan(const Service::UUIDList & services,
 			Callbacks::SuccessNotification scanCompleted,
 			Callbacks::Discovered deviceDiscoveredCb, Callbacks::Error failure=NULL);
 
@@ -179,9 +183,11 @@ public:
 			Callbacks::Error failure=NULL);
 
 
+	Service::List servicesFor(const UUID & device);
 	Characteristic::List characteristicsFor(const UUID & device);
 
-	bool read(const UUID & device, const Service & service_uuid,
+
+	bool read(const UUID & device, const Service::UUID & service_uuid,
 			const Characteristic::UUID & characteristic_uuid,
 			Callbacks::IncomingData inData,
 						Callbacks::Error failure=NULL);
@@ -199,7 +205,7 @@ public:
 						Callbacks::Error failure=NULL);
 
 	bool write(const UUID & device,
-			const Service & service_uuid,
+			const Service::UUID & service_uuid,
 			const Characteristic::UUID & characteristic_uuid,
 			const BinaryBuffer & value,
 			Callbacks::SuccessNotification succ=NULL,
@@ -212,18 +218,18 @@ public:
 			Callbacks::SuccessNotification succ=NULL,
 						Callbacks::Error failure=NULL);
 
-	bool writeWithoutResponse(const UUID & device, const Service & service_uuid,
+	bool writeWithoutResponse(const UUID & device, const Service::UUID & service_uuid,
 			const Characteristic::UUID & characteristic_uuid,
 			const BinaryBuffer & value,
 			Callbacks::SuccessNotification succ=NULL,
 						Callbacks::Error failure=NULL);
 
-	bool startNotification(const UUID & device, const Service & service_uuid,
+	bool startNotification(const UUID & device, const Service::UUID & service_uuid,
 			const Characteristic::UUID & characteristic_uuid, Callbacks::IncomingData inDataCallback,
 			Callbacks::Error failure=NULL);
 
 
-	bool stopNotification(const UUID & device, const Service & service_uuid,
+	bool stopNotification(const UUID & device, const Service::UUID & service_uuid,
 			const Characteristic::UUID & characteristic_uuid,
 			Callbacks::SuccessNotification succ=NULL,
 						Callbacks::Error failure=NULL);
@@ -233,7 +239,7 @@ public:
 
 	bool isConnected(const UUID & device, Callbacks::SuccessNotification succ,
 						Callbacks::Error failure);
-	bool isEnabled(const UUID & device, Callbacks::SuccessNotification succ,
+	bool isEnabled(Callbacks::SuccessNotification succ,
 						Callbacks::Error failure);
 
 	bool enable(Callbacks::SuccessNotification succ=NULL,
@@ -261,11 +267,14 @@ public:
         }
 
         */
+/*
 	gatt_connection_t *gattlib_connect(const char *src, const char *dst,
 					uint8_t dest_type, gattlib_bt_sec_level_t sec_level, int psm, int mtu);
 
+*/
 
 
+	const DeviceName & deviceName(const UUID & devUUID);
 
 
 	// ********** internal usage **************
@@ -291,6 +300,11 @@ private:
 	Device::Details * deviceDetails(const UUID & devId);
 
 	bool performDiscovery(Device::Details * onDevice);
+	bool performServiceDiscovery(Device::Details * onDevice);
+	bool performCharacteristicsDiscovery(Device::Details * onDevice);
+
+	void autoDiscoverServicesStep(Device::Details * onDevice);
+	void autoDiscoverCharacteristicsStep(Device::Details * onDevice);
 
 	AdapterPtr adapter;
 	AdapterName adapter_name;
@@ -302,7 +316,7 @@ private:
 
 	ConnectionParams connParams;
 	CallbacksContainer callbacks;
-
+	DeviceNamesMap namesCache;
 	Callbacks::Queue reportQueue;
 
 
