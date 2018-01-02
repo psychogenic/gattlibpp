@@ -306,10 +306,41 @@ bool BLECentral::scan(SecondsValue runSeconds,
 	BLECENTRAL_ENSURE_ADAPTER_AVAIL(failure);
 
 	if (is_scanning) {
+		/*
+		AsyncAction::Details asyncAlreadyRunningAct("scanrunning", scanCompleted, failure);
+		asyncAlreadyRunningAct.trigger = [](AsyncAction::Details * thisAction) {
+			thisAction->completedWithSuccess();
+		};
 
-		BLECENTRAL_TRIGGER_CB_IFSET(failure, "already scanning");
-		return false;
+		queueAsyncAction(asyncAlreadyRunningAct);
+		*/
+		return true;
 	}
+
+	if (connected_to.size() && ! numAsyncActionsQueued()) {
+		BLECNTL_DEBUGLN("asked to scan but we're connected and there's nothing queued to disconn... do that first");
+
+		Device::Details * dets = deviceDetails(connected_to);
+		if (dets && dets->connection) {
+			// we really seem to be still connected to this thing
+			AsyncAction::Details autoDisconnAction("autodisconn", [](){
+				BLECNTL_DEBUGLN("auto disconn completed");
+			}, [](){
+				BLECNTL_DEBUGLN("hm, auto disconn failed?");
+			});
+
+			UUID devId = dets->id;
+
+			autoDisconnAction.trigger = [this, devId](AsyncAction::Details * thisAction){
+
+				this->disconnect(devId, [](){
+				}, [](){
+				});
+			};
+
+		}
+	}
+
 
 
 	devDiscoveredCb = deviceDiscoveredCb;
@@ -320,7 +351,7 @@ bool BLECentral::scan(SecondsValue runSeconds,
 		if (gattlib_adapter_scan_enable_async(adapter, clib_device_discovered_callback,
 				runSeconds, clib_scan_complete_callback) != 0)
 		{
-
+			this->is_scanning = false;
 			thisAction->completedWithFailure();
 		}
 
@@ -328,27 +359,6 @@ bool BLECentral::scan(SecondsValue runSeconds,
 
 
 	queueAsyncAction(asyncAct);
-
-
-
-#if 0
-	// let's push this onto the queue, because bluez has
-	// a tendency to spit out all the cached deviced immediately,
-	// and we want to ensure that
-	//  a) we're well into 'scanning mode' when the discovered callback triggers, and
-	//  b) we want the discovered cb to alway be called in the same context -- meaning
-	//     if the async processing happens is some thread, then every cb should happen
-	//     in that thread.
-	reportQueue.push_back([runSeconds, this, failure](){
-
-		if (gattlib_adapter_scan_enable_async(adapter, clib_device_discovered_callback,
-				runSeconds, clib_scan_complete_callback) != 0)
-		{
-			BLECENTRAL_TRIGGER_CB_IFSET(failure, "scan enable call failed");
-		}
-
-	});
-#endif
 
 	is_scanning = true;
 	return true;
@@ -381,7 +391,13 @@ bool BLECentral::stopScan(Callbacks::SuccessNotification succ,
 		Callbacks::Error failure) {
 	BLECENTRAL_ENSURE_ADAPTER_AVAIL(failure);
 	if (! is_scanning) {
-		BLECENTRAL_TRIGGER_CB_IFSET(failure, "not currently scanning");
+
+		AsyncAction::Details alreadyDoneAct("stopScanDone", succ, failure);
+		alreadyDoneAct.trigger = [](AsyncAction::Details * thisAction) {
+			thisAction->completedWithSuccess();
+		};
+		queueAsyncAction(alreadyDoneAct);
+		return true;
 	}
 
 	// we are currently scanning, which means we have an async op running
@@ -962,7 +978,7 @@ void BLECentral::deviceDiscovered(const Discovery::Device & dev) {
 
 void BLECentral::scanCompleted() {
 
-	// is_scanning = false;
+	is_scanning = false;
 	currentOpCompleted();
 
 }

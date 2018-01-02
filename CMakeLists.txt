@@ -45,7 +45,7 @@ set(CPACK_PACKAGE_INSTALL_DIRECTORY /usr CACHE STRING "Install directory (defaul
 if (ENV{TRAVIS_TAG})
   set(CPACK_PACKAGE_VERSION $ENV{TRAVIS_TAG})
 else()
-  set(CPACK_PACKAGE_VERSION 1.0.2)
+  set(CPACK_PACKAGE_VERSION 1.0.3)
 endif()
 set(CPACK_PACKAGE_CONTACT "Pat Deegan, https://psychogenic.com")
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "C++ Wrapper for gattlib, to access GATT information from Bluetooth Low Energy (BLE) devices")

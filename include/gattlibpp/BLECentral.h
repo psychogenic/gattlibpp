@@ -442,7 +442,7 @@ private:
 	void autoDiscoverServicesStep(Device::Details * onDevice);
 	void autoDiscoverCharacteristicsStep(Device::Details * onDevice);
 	void queueAsyncAction(const AsyncAction::Details & dets);
-
+	inline AsyncActionQueue::size_type numAsyncActionsQueued() { return asyncActions.size(); }
 
 	AdapterPtr adapter;
 	AdapterName adapter_name;
