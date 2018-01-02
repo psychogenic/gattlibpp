@@ -24,6 +24,7 @@
 #include "../include/gattlibpp/BLECentralDebug.h"
 #include "../include/gattlibpp/GattlibppPlatform.h"
 
+#include <algorithm>
 
 #define BLECENTRAL_FAKE_READASYNC
 
@@ -86,6 +87,14 @@ static void clib_generic_async_op_done() {
 
 	Gattlib::BLECentral::getInstance()->currentOpCompleted();
 }
+
+
+static void clib_scan_disable_done() {
+
+	Gattlib::BLECentral::getInstance()->scanDisableCompleted();
+}
+
+
 
 static void clib_generic_async_op_failed() {
 	Gattlib::BLECentral::getInstance()->currentOpFailed();
@@ -168,18 +177,29 @@ static bool getUUIDForCharOrFail(Device::Details * dets,
 
 void BLECentral::processAsync() {
 
-
 	gattlib_async_process_all();
-	if (reportQueue.size())
-		{
-			Callbacks::Queue q = reportQueue; // local copy... callbacks might affect
-			reportQueue.clear();
-			for (Callbacks::Queue::iterator iter = q.begin();
-					iter != q.end(); iter++)
-			{
-				(*iter)();
-			}
+	if (reportQueue.size()) {
+		Callbacks::Queue q = reportQueue; // local copy... callbacks might affect
+		reportQueue.clear();
+		for (Callbacks::Queue::iterator iter = q.begin(); iter != q.end();
+				iter++) {
+			(*iter)();
 		}
+	}
+
+	if (asyncActions.size()) {
+		AsyncAction::Details & actDets = asyncActions.front();
+		if (actDets.isPending()) {
+			BLECNTL_DEBUGLN("starting async action: " << actDets.name);
+			actDets.run();
+		} else if (actDets.isDone()) {
+			BLECNTL_DEBUGLN("async action '" << actDets.name << "' is done");
+			asyncActions.pop();
+		} else {
+			actDets.incrementWaitCount();
+
+		}
+	}
 }
 
 Device::Details * BLECentral::deviceDetails(const UUID & devId) {
@@ -291,9 +311,27 @@ bool BLECentral::scan(SecondsValue runSeconds,
 		return false;
 	}
 
-	callbacks.setup(scanCompleted, failure);
-	callbacks.discovered = deviceDiscoveredCb;
 
+	devDiscoveredCb = deviceDiscoveredCb;
+
+	AsyncAction::Details asyncAct("scan", scanCompleted, failure);
+	asyncAct.trigger = [runSeconds, this](AsyncAction::Details * thisAction) {
+
+		if (gattlib_adapter_scan_enable_async(adapter, clib_device_discovered_callback,
+				runSeconds, clib_scan_complete_callback) != 0)
+		{
+
+			thisAction->completedWithFailure();
+		}
+
+	};
+
+
+	queueAsyncAction(asyncAct);
+
+
+
+#if 0
 	// let's push this onto the queue, because bluez has
 	// a tendency to spit out all the cached deviced immediately,
 	// and we want to ensure that
@@ -310,6 +348,7 @@ bool BLECentral::scan(SecondsValue runSeconds,
 		}
 
 	});
+#endif
 
 	is_scanning = true;
 	return true;
@@ -345,17 +384,37 @@ bool BLECentral::stopScan(Callbacks::SuccessNotification succ,
 		BLECENTRAL_TRIGGER_CB_IFSET(failure, "not currently scanning");
 	}
 
-	// reportQueue.push_back([this, succ, failure](){
+	// we are currently scanning, which means we have an async op running
+
+
+	if (asyncActions.size() && asyncActions.front().isRunning() && asyncActions.front().name == "scan") {
+		asyncActions.front().cancelWithoutCallback();
+	}
+
+
+
+	AsyncAction::Details asyncAct("stopScan", succ, failure);
+	asyncAct.trigger = [this](AsyncAction::Details * thisAction) {
+		if (gattlib_adapter_scan_disable_async(adapter, clib_scan_disable_done) != 0)
+		{
+			thisAction->completedWithFailure();
+		}
+
+	};
+
+
+	queueAsyncAction(asyncAct);
+
+#if 0
 
 		callbacks.success = succ;
 		callbacks.failure = failure;
-		if (gattlib_adapter_scan_disable_async(adapter, clib_generic_async_op_done) != 0)
+		if (gattlib_adapter_scan_disable_async(adapter, clib_scan_disable_done) != 0)
 		{
 
 			BLECENTRAL_TRIGGER_CB_IFSET(failure, "scan disable call failed");
 		}
-
-	// });
+#endif
 
 	return true;
 
@@ -379,13 +438,39 @@ bool BLECentral::connect(const UUID & devId, const ConnectionParams & parameters
 		return false;
 	}
 
-	callbacks.setup(succ, failure);
 	Device::Details * devDets = deviceDetails(devId);
 	if (! devDets) {
 		devices[devId].id = devId;
 		devDets = deviceDetails(devId);
 	}
 	connected_to = devId;
+
+
+
+	AsyncAction::Details asyncAct("connect", succ, failure);
+	asyncAct.trigger = [this, devId, parameters](AsyncAction::Details * thisAction) {
+
+		if (gattlib_async_connect(NULL, devId.c_str(),
+							(uint8_t)parameters.destinationType,
+							parameters.security,
+							parameters.PSM,
+							parameters.MTU,
+							clib_connected_callback) != 0)
+		{
+
+			thisAction->completedWithFailure();
+		}
+
+
+	};
+
+
+	queueAsyncAction(asyncAct);
+
+#if 0
+
+
+	callbacks.setup(succ, failure);
 	if (gattlib_async_connect(NULL, devId.c_str(),
 						(uint8_t)parameters.destinationType,
 						parameters.security,
@@ -397,6 +482,8 @@ bool BLECentral::connect(const UUID & devId, const ConnectionParams & parameters
 		BLECENTRAL_TRIGGER_CB_IFSET(failure, "connect call failed");
 		return false;
 	}
+
+#endif
 	return true;
 
 }
@@ -418,6 +505,27 @@ bool BLECentral::disconnect(const UUID& devId,
 
 	Device::Details * devDets = deviceDetails(devId);
 
+
+
+	AsyncAction::Details asyncAct("disconnect", succ, failure);
+	asyncAct.trigger = [devDets](AsyncAction::Details * thisAction) {
+
+		if (gattlib_disconnect_async(devDets->connection, clib_disconnected_callback)) {
+
+			thisAction->completedWithFailure();
+		}
+
+
+	};
+
+
+	queueAsyncAction(asyncAct);
+
+
+
+
+#if 0
+
 	callbacks.setup(succ, failure);
 	reportQueue.push_back([devDets, failure](){
 
@@ -428,6 +536,7 @@ bool BLECentral::disconnect(const UUID& devId,
 		}
 	});
 
+#endif
 	return true;
 
 }
@@ -459,20 +568,42 @@ bool BLECentral::read(const UUID& device,
 		return false;
 	}
 
-	callbacks.failure = failure;
-	callbacks.success = NULL;
-	callbacks.datareceived = inData;
+
+	Characteristic::Details & charDets = dets->characteristic(
+					characteristic_uuid);
+
+
+	AsyncAction::Details asyncAct("read", inData, failure);
+	uuid_t * cuuidptr = &char_uuid;
+	asyncAct.trigger = [dets, &charDets](AsyncAction::Details * thisAction) {
+		if (gattlib_read_char_by_uuid_async(dets->connection, &(charDets.gl_uuid), clib_read_char_callback) != 0)
+		{
+				thisAction->completedWithFailure();
+		}
+
+
+	};
+
+
+	queueAsyncAction(asyncAct);
+	/*
+
 	if (gattlib_read_char_by_uuid_async(dets->connection, &char_uuid, clib_read_char_callback) != 0)
 	{
 		BLECENTRAL_TRIGGER_CB_IFSET(failure, "async read call failed");
 					return false;
 	}
+	*/
 
 	return true;
 
 }
 
+void BLECentral::queueAsyncAction(const AsyncAction::Details & dets) {
+	BLECNTL_DEBUGLN("Queueing async action " << dets.name);
+	asyncActions.push(dets);
 
+}
 
 bool BLECentral::write(const UUID& device, const Service::UUID& service_uuid,
 		const Characteristic::UUID& characteristic_uuid,
@@ -504,9 +635,8 @@ bool BLECentral::write(const UUID& device,
 	{
 		return false;
 	}
-	callbacks.setup(succ, failure);
 
-
+	// new buffer -- will be deleted after async call...
 	uint8_t * buffer = new uint8_t[value.size()] ;
 	if (! buffer )
 	{
@@ -519,8 +649,32 @@ bool BLECentral::write(const UUID& device,
 		buffer[i] = value[i];
 	}
 
+	BinaryBuffer::size_type buf_size = value.size();
+
+	Characteristic::Details & charDets = dets->characteristic(
+					characteristic_uuid);
+
+	AsyncAction::Details asyncAct("write", succ, failure);
+	asyncAct.trigger = [dets, &charDets, buffer, buf_size](AsyncAction::Details * thisAction) {
+
+		if (gattlib_write_char_by_uuid_async(dets->connection,
+					&(charDets.gl_uuid), buffer, buf_size,
+					clib_generic_async_op_done,
+					clib_generic_async_op_failed
+					) !=0)
+			{
+				thisAction->completedWithFailure();
+			}
+
+		delete [] buffer;
+
+	};
+
+	queueAsyncAction(asyncAct);
 
 
+
+#if 0
 	callbacks.setup(succ, failure);
 	// no async version yet...
 	if (gattlib_write_char_by_uuid_async(dets->connection,
@@ -537,6 +691,8 @@ bool BLECentral::write(const UUID& device,
 
 	}
 	delete[] buffer;
+
+#endif
 
 	// reportQueue.push_back(succ);
 
@@ -744,8 +900,34 @@ bool BLECentral::enable(Callbacks::SuccessNotification succ,
 /* **************** internals/public -- used by C callbacks ************ */
 void BLECentral::readDataReceived(const uint8_t * buf, size_t len) {
 	BinaryBuffer binBuf;
-	Callbacks::IncomingData drcb;
 
+
+	if (! asyncActions.size()) {
+
+		BLECNTL_ERRORLN("got readDataReceived() but no async actions in Q?");
+		return;
+	}
+
+	AsyncAction::Details & curAct = asyncActions.front();
+	if (curAct.callbacks.datareceived) {
+
+		binBuf.insert(binBuf.end(), buf, &(buf[len]));
+
+#ifdef BLECENTRAL_FAKE_READASYNC
+		Callbacks::IncomingData drcb = curAct.callbacks.datareceived;
+		reportQueue.push_back([binBuf, drcb]() {
+			drcb(binBuf);
+		});
+
+#else
+		(curAct.callbacks.datareceived)(binBuf);
+#endif
+
+	}
+	// this asyn action is done.
+	curAct.markCompleted();
+
+#if 0
 	if (callbacks.datareceived) {
 
 		binBuf.insert(binBuf.end(), buf, &(buf[len]));
@@ -765,6 +947,7 @@ void BLECentral::readDataReceived(const uint8_t * buf, size_t len) {
 		(callbacks.datareceived)(binBuf);
 #endif
 	}
+#endif
 
 
 }
@@ -772,15 +955,21 @@ void BLECentral::readDataReceived(const uint8_t * buf, size_t len) {
 
 void BLECentral::deviceDiscovered(const Discovery::Device & dev) {
 	namesCache[dev.id] = dev.name;
-	if (callbacks.discovered) {
-		(callbacks.discovered)(dev);
+	if (devDiscoveredCb) {
+		(devDiscoveredCb)(dev);
 	}
 }
 
 void BLECentral::scanCompleted() {
-	Callbacks::SuccessNotification succ = callbacks.success;
 
 	// is_scanning = false;
+	currentOpCompleted();
+
+}
+
+
+void BLECentral::scanDisableCompleted() {
+	is_scanning = false;
 	currentOpCompleted();
 
 }
@@ -924,15 +1113,13 @@ void BLECentral::autoDiscoverServicesStep(Device::Details * onDevice)
 void BLECentral::autoDiscoverCharacteristicsStep(Device::Details * onDevice) {
 	BLECNTL_DEBUGLN("doing char discovery, yeah");
 	performCharacteristicsDiscovery(onDevice);
-	Callbacks::SuccessNotification succ = callbacks.success;
-	onDevice->discovery_done = true;
-	reportQueue.push_back([succ]() {
-		if (succ) {
-			BLECNTL_DEBUGLN("Calling dev conn'ed cb");
 
-			succ();
-		} else {
-			BLECNTL_DEBUGLN("No dev conn'ed cb to call");
+	onDevice->discovery_done = true;
+	reportQueue.push_back([this]() {
+		BLECNTL_DEBUGLN("Calling dev conn'ed cb");
+		if (asyncActions.size())
+		{
+			asyncActions.front().completedWithSuccess();
 		}
 	});
 }
@@ -956,7 +1143,11 @@ void BLECentral::deviceConnected(gatt_connection_t* connection) {
 		}
 
 	} else {
-		BLECENTRAL_TRIGGER_CB_IFSET(callbacks.failure, "deviceConnected() callback called with empty conn");
+		BLECNTL_DEBUGLN("deviceConnected() callback called with empty conn");
+		if (asyncActions.size()) {
+			asyncActions.front().completedWithFailure();
+		}
+
 	}
 
 }
@@ -971,22 +1162,18 @@ void BLECentral::deviceDisconnected() {
 	currentOpCompleted();
 }
 void BLECentral::currentOpCompleted() {
-	Callbacks::SuccessNotification succ = callbacks.success;
-	callbacks.clear();
-	if (succ) {
-		succ();
+	if (asyncActions.size()) {
+		asyncActions.front().completedWithSuccess();
 	}
+
 }
 
 void BLECentral::currentOpFailed() {
-	Callbacks::Error failed = callbacks.failure;
-	callbacks.clear();
-	if (failed) {
-		failed();
+	if (asyncActions.size()) {
+		asyncActions.front().completedWithFailure();
 	}
 
 }
-
 
 
 void BLECentral::handleNotification(const Characteristic::UUID & charUUID,
@@ -1005,8 +1192,15 @@ void BLECentral::handleNotification(const Characteristic::UUID & charUUID,
 				notifHandler = dets.notificationHandler(charUUID);
 
 				BLECNTL_DEBUGLN("calling handler for " << charUUID);
+
 				BinaryBuffer notifBuf;
 				notifBuf.insert(notifBuf.end(), data, &data[data_length]);
+				/*
+				for (size_t i=data_length; i > 0; i--) {
+					notifBuf.push_back(data[i-1]);
+				}
+				*/
+				// std::reverse_copy( &data[data_length], data, std::back_inserter(notifBuf));
 				reportQueue.push_back([notifHandler, notifBuf]() {
 
 					notifHandler(notifBuf);

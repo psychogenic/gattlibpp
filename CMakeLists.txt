@@ -45,7 +45,7 @@ set(CPACK_PACKAGE_INSTALL_DIRECTORY /usr CACHE STRING "Install directory (defaul
 if (ENV{TRAVIS_TAG})
   set(CPACK_PACKAGE_VERSION $ENV{TRAVIS_TAG})
 else()
-  set(CPACK_PACKAGE_VERSION 1.0-dev)
+  set(CPACK_PACKAGE_VERSION 1.0.2)
 endif()
 set(CPACK_PACKAGE_CONTACT "Pat Deegan, https://psychogenic.com")
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "C++ Wrapper for gattlib, to access GATT information from Bluetooth Low Energy (BLE) devices")
@@ -84,7 +84,7 @@ if (NOT CMAKE_SYSROOT)
   execute_process(COMMAND dpkg --print-architecture OUTPUT_VARIABLE CPACK_DEBIAN_PACKAGE_ARCHITECTURE OUTPUT_QUIET)
 endif()
 
-set(CPACK_DEBIAN_PACKAGE_DEPENDS "gattlib")
+set(CPACK_DEBIAN_PACKAGE_DEPENDS "gattlib (>= 0.3), libglib2.0-0 (>= 2.54.0), bluez (>= 5.40)")
 #
 # List of file to install
 #

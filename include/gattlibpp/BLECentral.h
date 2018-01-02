@@ -98,6 +98,141 @@ typedef struct ConnectionParamsStruct {
 typedef std::map<UUID, Device::Details> 	DeviceMap;
 typedef std::map<UUID, DeviceName>			DeviceNamesMap;
 
+namespace AsyncAction {
+
+namespace State {
+typedef enum StateValueEnum {
+	Pending,
+	Triggered,
+	Completed
+}Value;
+}
+
+// forward decl
+struct AsyncActionDetailsStruct;
+typedef std::function<void(AsyncActionDetailsStruct * thisAction)> TriggerFunction;
+
+typedef struct AsyncActionDetailsStruct {
+	std::string name;
+	State::Value state;
+	CallbacksContainer callbacks;
+	TriggerFunction trigger;
+	uint16_t waitCount;
+
+	AsyncActionDetailsStruct() :
+			state(State::Pending), trigger(NULL), waitCount(0) {
+
+	}
+	AsyncActionDetailsStruct(const std::string & actionName, const TriggerFunction & trig,
+			const Callbacks::SuccessNotification & succ,
+			const Callbacks::Error & fail) :
+			name(actionName),
+			state(State::Pending), trigger(trig), waitCount(0) {
+		callbacks.success = succ;
+		callbacks.failure = fail;
+
+	}
+	AsyncActionDetailsStruct(const std::string & actionName,
+			const Callbacks::SuccessNotification & succ,
+			const Callbacks::Error & fail) :
+				name(actionName),
+				state(State::Pending),
+				trigger(NULL), waitCount(0) {
+
+		callbacks.success = succ;
+		callbacks.failure = fail;
+	}
+	AsyncActionDetailsStruct(const std::string & actionName,
+			const Callbacks::Discovered & discovered,
+			const Callbacks::Error & fail) :
+				name(actionName),
+				state(State::Pending),
+				trigger(NULL), waitCount(0) {
+
+		callbacks.discovered = discovered;
+		callbacks.failure = fail;
+	}
+
+	AsyncActionDetailsStruct(const std::string & actionName,
+			const Callbacks::IncomingData & inData,
+			const Callbacks::Error & fail) :
+				name(actionName),
+				state(State::Pending),
+				trigger(NULL), waitCount(0) {
+
+		callbacks.datareceived = inData;
+		callbacks.failure = fail;
+	}
+
+	bool run() {
+		if (!isPending()) {
+			return false;
+		}
+
+		state = State::Triggered;
+		trigger(this);
+		return true;
+	}
+
+	bool isPending() const {
+		return state == State::Pending;
+	}
+
+	bool isRunning() const {
+		return state == State::Triggered;
+	}
+
+	bool isDone() const {
+		return state == State::Completed;
+	}
+
+	void incrementWaitCount() {
+		waitCount++;
+	}
+
+	Callbacks::SuccessNotification successWrapper() {
+		auto wrap = [this]() {
+			this->completedWithSuccess();
+		};
+
+		return wrap;
+	}
+	Callbacks::Error failWrapper() {
+		auto wrap = [this]() {
+			this->completedWithFailure();
+		};
+
+		return wrap;
+	}
+
+
+	// used to terminate this asyn action
+	void cancelWithoutCallback() {
+		markCompleted();
+	}
+	inline void markCompleted() {
+		state = State::Completed;
+	}
+	void completedWithSuccess() {
+		markCompleted();
+		if (callbacks.success) {
+			(callbacks.success)();
+		}
+	}
+
+	void completedWithFailure() {
+		markCompleted();
+		if (callbacks.failure) {
+			(callbacks.failure)();
+		}
+	}
+
+} Details;
+
+}
+
+typedef std::queue<AsyncAction::Details>				AsyncActionQueue;
+
 class BLECentral {
 public:
 	static BLECentral * getInstance();
@@ -286,6 +421,7 @@ public:
 	void deviceDisconnected();
 	void deviceDiscovered(const Discovery::Device & dev);
 	void scanCompleted();
+	void scanDisableCompleted();
 	void readDataReceived(const uint8_t * buf, size_t len);
 	void handleNotification(const Characteristic::UUID & charUUID,
 								const uint8_t* data,
@@ -305,6 +441,8 @@ private:
 
 	void autoDiscoverServicesStep(Device::Details * onDevice);
 	void autoDiscoverCharacteristicsStep(Device::Details * onDevice);
+	void queueAsyncAction(const AsyncAction::Details & dets);
+
 
 	AdapterPtr adapter;
 	AdapterName adapter_name;
@@ -315,8 +453,13 @@ private:
 	UUID connected_to;
 
 	ConnectionParams connParams;
-	CallbacksContainer callbacks;
+
 	DeviceNamesMap namesCache;
+
+	Callbacks::Discovered devDiscoveredCb;
+
+
+	AsyncActionQueue asyncActions;
 	Callbacks::Queue reportQueue;
 
 
