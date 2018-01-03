@@ -34,10 +34,25 @@ I like C++.  In this case, one of the main advantages of GattLib++ is to leverag
 This code has only been tested with Linux and Bluez on the D-Bus, but should work anywhere you can get `gattlib` working.  
 
 
+
+
+
+Latest GattLib++ Release packages
+=================================
+
+* For x86_64, using GattLib ([async version](https://github.com/psychogenic/gattlib ):
+
+
+    - ZIP: <https://github.com/psychogenic/gattlibpp/releases/download/v1.0.3/gattlibpp_1.0.3_.zip>
+    - DEB: <https://github.com/psychogenic/gattlibpp/releases/download/v1.0.3/gattlibpp_1.0.3_.deb>
+    - RPM: <https://github.com/psychogenic/gattlibpp/releases/download/v1.0.3/gattlibpp_1.0.3_.rpm>
+
+
+
 Build GattLib++
 ===============
 
-* Gattlib++ requires `gattlib` (and it's dependencies), and that's it.
+* Gattlib++ requires `gattlib` (the async version, available at on [my forked version](https://github.com/psychogenic/gattlib)), and that's it.
 
 To build:
 
@@ -52,6 +67,11 @@ make
 Examples
 ========
 
+
+* [Coraline BLE plugin](https://github.com/psychogenic/coraline-plugin-ble-central)
+A real-world demo using GattLib++ to provide BLE functionality to ionic/cordova apps running on Linux desktops (through [Coraline](https://coraline.psychogenic.com/))
+
+
 * [Demonstrate scanning and discovery](/examples/ble_scan/ble_scan.cpp):
 
         ./examples/ble_scan/ble_scan (to scan for devices)
@@ -63,7 +83,6 @@ Examples
         ./examples/read_write/read_write 78:A5:04:22:45:4F read 0x2a28 
         ./examples/read_write/read_write 78:A5:04:22:45:4F write 713d0002-503e-4c75-ba94-3148f18d941e 0x727170696867
 
-        
 
 Quick Start
 ===========
