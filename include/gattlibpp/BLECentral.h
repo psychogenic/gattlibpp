@@ -95,7 +95,7 @@ typedef struct ConnectionParamsStruct {
 } ConnectionParams;
 
 
-typedef std::map<UUID, Device::Details> 	DeviceMap;
+typedef std::map<UUID, Device::Details> 		DeviceMap;
 typedef std::map<UUID, DeviceName>			DeviceNamesMap;
 
 namespace AsyncAction {

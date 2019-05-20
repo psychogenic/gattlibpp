@@ -25,6 +25,7 @@
 #include "../include/gattlibpp/GattlibppPlatform.h"
 
 #include <algorithm>
+#include <string>
 
 #define BLECENTRAL_FAKE_READASYNC
 
@@ -131,22 +132,33 @@ BLECentral * BLECentral::ble_central_singleton = NULL;
 // helper
 typedef std::function<bool(const Characteristic::Details &)> CharOpSupportedFunc;
 
+static Characteristic::UUID normalizeDeviceUUID(const UUID& dev_uuid) {
+	UUID duid = dev_uuid;
+	return duid;
+/*
+ not useful
+	std::transform(duid.begin(), duid.end(), duid.begin(), ::tolower);
+	BLECNTL_DEBUGLN("NORMALIZED " << dev_uuid << " TO " << duid);
+
+	return duid;
+*/
+}
 static bool getUUIDForCharOrFail(Device::Details * dets,
-		const Characteristic::UUID& characteristic_uuid, CharOpSupportedFunc opSupp,
+		const Characteristic::UUID& charuid, CharOpSupportedFunc opSupp,
 		uuid_t * into, Callbacks::Error failure)
 {
 
+	// Characteristic::UUID charuid = normalizeCharacteristic(characteristic_uuid);
 	if (dets->discovery_done) {
 
 		DEVDETS_LOCKGUARD_BEGINBLOCK(dets, "getUUID");
-		if (!dets->hasCharacteristic(characteristic_uuid)) {
+		if (!dets->hasCharacteristic(charuid)) {
 
 			BLECENTRAL_TRIGGER_CB_IFSET(failure,
-					"don't seem to have this char: " << characteristic_uuid);
+					"don't seem to have this char: " << charuid);
 			return false;
 		}
-		const Characteristic::Details & charDets = dets->characteristic(
-				characteristic_uuid);
+		const Characteristic::Details & charDets = dets->characteristic(charuid);
 		if (! opSupp(charDets)) {
 
 			BLECENTRAL_TRIGGER_CB_IFSET(failure, "char doesn't support operation");
@@ -158,8 +170,8 @@ static bool getUUIDForCharOrFail(Device::Details * dets,
 		DEVDETS_LOCKGUARD_ENDBLOCK();
 	} else {
 		// going blind...
-		if (gattlib_string_to_uuid(characteristic_uuid.c_str(),
-				characteristic_uuid.size(), into) != 0) {
+		if (gattlib_string_to_uuid(charuid.c_str(),
+				charuid.size(), into) != 0) {
 			BLECENTRAL_TRIGGER_CB_IFSET(failure,
 					"conversion of uuid string to uuid_t failed");
 			return false;
@@ -203,7 +215,7 @@ void BLECentral::processAsync() {
 }
 
 Device::Details * BLECentral::deviceDetails(const UUID & devId) {
-	DeviceMap::iterator iter = devices.find(devId);
+	DeviceMap::iterator iter = devices.find(normalizeDeviceUUID(devId));
 	if (iter == devices.end())
 	{
 		return NULL;
@@ -444,10 +456,13 @@ bool BLECentral::isConnected(const UUID & devId) {
 
 }
 
-bool BLECentral::connect(const UUID & devId, const ConnectionParams & parameters,
+bool BLECentral::connect(const UUID & devUUID, const ConnectionParams & parameters,
 		Callbacks::SuccessNotification succ, Callbacks::Error failure) {
 
 	BLECENTRAL_ENSURE_ADAPTER_AVAIL(failure);
+
+	UUID devId = normalizeDeviceUUID(devUUID);
+
 	if (isConnected(devId)) {
 
 		BLECENTRAL_TRIGGER_CB_IFSET(failure, "is already connected");
@@ -738,6 +753,7 @@ bool BLECentral::startNotification(const UUID& device,
 		const Characteristic::UUID& characteristic_uuid,
 		Callbacks::IncomingData inDataCallback, Callbacks::Error failure) {
 
+	// Characteristic::UUID characteristic_uuid = normalizeCharacteristic(chr_uuid);
 
 	BLECNTL_DEBUG("\nAttempting to subscribe to char "<< characteristic_uuid << "... ");
 	BLECENTRAL_ENSURE_ADAPTER_AVAIL(failure);
@@ -809,11 +825,14 @@ bool BLECentral::startNotification(const UUID& device,
 }
 
 bool BLECentral::stopNotification(const UUID& device,
-		const Service::UUID& service_uuid, const Characteristic::UUID& characteristic_uuid,
+		const Service::UUID& service_uuid, const Characteristic::UUID& chr_uuid,
 		Callbacks::SuccessNotification succ, Callbacks::Error failure) {
 
 
 	BLECENTRAL_ENSURE_ADAPTER_AVAIL(failure);
+
+	Characteristic::UUID characteristic_uuid = chr_uuid; // normalizeCharacteristic(chr_uuid);
+
 	if (!isConnected(device)) {
 		BLECENTRAL_TRIGGER_CB_IFSET(failure, "stopNotifs called, not connected");
 		return false;
@@ -1178,8 +1197,12 @@ void BLECentral::deviceDisconnected() {
 	currentOpCompleted();
 }
 void BLECentral::currentOpCompleted() {
+	
+	BLECNTL_DEBUGLN("BLECentral::currentOpCompleted()");
 	if (asyncActions.size()) {
+		BLECNTL_DEBUGLN("calling completedWithSuccess");
 		asyncActions.front().completedWithSuccess();
+		BLECNTL_DEBUGLN("done");
 	}
 
 }
@@ -1192,12 +1215,13 @@ void BLECentral::currentOpFailed() {
 }
 
 
-void BLECentral::handleNotification(const Characteristic::UUID & charUUID,
+void BLECentral::handleNotification(const Characteristic::UUID & chr_uuid,
 							const uint8_t* data,
 							size_t data_length) {
 
 	Callbacks::IncomingNotification notifHandler;
 
+	Characteristic::UUID charUUID = chr_uuid; // normalizeCharacteristic(chr_uuid);
 	BLECNTL_DEBUGLN("BLECentral::handleNotification()");
 	for (DeviceMap::iterator devIter = devices.begin(); devIter != devices.end(); devIter++) {
 		Device::Details & dets = (*devIter).second;

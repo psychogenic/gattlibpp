@@ -28,6 +28,12 @@ find_package(PkgConfig REQUIRED)
 
 # Show all the warnings
 set(CMAKE_CPP_FLAGS "${CMAKE_CPP_FLAGS} -Wall")
+
+set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -Wall -g -O0 ")
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -Wall")
+
+
+
 include_directories(include)
 
 pkg_search_module(GATTLIB REQUIRED gattlib)
@@ -45,7 +51,7 @@ set(CPACK_PACKAGE_INSTALL_DIRECTORY /usr CACHE STRING "Install directory (defaul
 if (ENV{TRAVIS_TAG})
   set(CPACK_PACKAGE_VERSION $ENV{TRAVIS_TAG})
 else()
-  set(CPACK_PACKAGE_VERSION 1.0.3)
+  set(CPACK_PACKAGE_VERSION 1.0.4)
 endif()
 set(CPACK_PACKAGE_CONTACT "Pat Deegan, https://psychogenic.com")
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "C++ Wrapper for gattlib, to access GATT information from Bluetooth Low Energy (BLE) devices")

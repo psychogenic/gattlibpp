@@ -20,9 +20,31 @@
  */
 #include "../include/gattlibpp/DeviceDetails.h"
 
+#include <algorithm>
+#include <string>
+
 namespace Gattlib {
 
 namespace Device {
+
+/* normalize*
+ * ensure upper/lowercase doesn't cause us to miss
+ * the fact that we've actually seen this service/characteristic
+ */
+static Characteristic::UUID normalizeCharacteristicUUID(const Characteristic::UUID& characteristic_uuid) {
+	
+	Characteristic::UUID charuid = characteristic_uuid;
+	std::transform(charuid.begin(), charuid.end(), charuid.begin(), ::tolower);
+	BLECNTL_DEBUGLN("NORMALIZED " << characteristic_uuid << " TO " << charuid);
+	return charuid;
+}
+
+static Service::UUID normalizeServiceUUID(const Service::UUID& service_uuid) {
+	Service::UUID suid = service_uuid;
+	std::transform(suid.begin(), suid.end(), suid.begin(), ::tolower);
+	BLECNTL_DEBUGLN("NORMALIZED " << service_uuid << " TO " << suid);
+	return suid;
+}
 
 DeviceDetailsStruct::DeviceDetailsStruct() : connection(NULL), discovery_done(false),
 		num_registered_for_notifs(0){
@@ -34,18 +56,19 @@ DeviceDetailsStruct::DeviceDetailsStruct(const UUID & did) : id(did), connection
 }
 
 bool Details::hasNotificationHandlerFor(const Characteristic::UUID & uuid) {
-	return notifHandlers.find(uuid) != notifHandlers.end();
+	return notifHandlers.find(normalizeCharacteristicUUID(uuid)) != notifHandlers.end();
 }
 Callbacks::IncomingNotification Details::notificationHandler(const Characteristic::UUID & uuid) {
-	return (*(notifHandlers.find(uuid))).second;
+	return (*(notifHandlers.find(normalizeCharacteristicUUID(uuid)))).second;
 }
 
 
 bool Details::addService(const Service::UUID & uuid,
 		const gattlib_primary_service_t & gl_serv) {
-		Service::Details sd(id, uuid, gl_serv);
+		Service::UUID suid = normalizeServiceUUID(uuid);
+		Service::Details sd(id, suid, gl_serv);
 
-		services.insert(ServicesMap::value_type(uuid, sd));
+		services.insert(ServicesMap::value_type(suid, sd));
 		return true;
 
 }
@@ -54,10 +77,10 @@ void Details::clearServices() {
 }
 
 bool Details::hasService(const Service::UUID & uuid) {
-	return services.find(uuid) != services.end();
+	return services.find(normalizeServiceUUID(uuid)) != services.end();
 }
 Service::Details & Details::service(const Service::UUID & uuid) {
-	ServicesMap::iterator iter = services.find(uuid);
+	ServicesMap::iterator iter = services.find(normalizeServiceUUID(uuid));
 	return (*iter).second;
 }
 void Details::foreachService(std::function<void(Service::Details &)> doOp) {
@@ -82,10 +105,13 @@ void Details::foreachCharacteristic(std::function<void(Characteristic::Details &
 }
 bool Details::addCharacteristic(const Characteristic::UUID & uuid,
 		const gattlib_characteristic_t & gl_char) {
-	Characteristic::Details cd(id, uuid, gl_char);
+
+	Characteristic::UUID cuid = normalizeCharacteristicUUID(uuid);
+
+	Characteristic::Details cd(id, cuid, gl_char);
 
 	if (cd.valid) {
-		characteristics.insert(CharacteristicsMap::value_type(uuid, cd));
+		characteristics.insert(CharacteristicsMap::value_type(cuid, cd));
 		return true;
 	}
 
@@ -93,16 +119,16 @@ bool Details::addCharacteristic(const Characteristic::UUID & uuid,
 }
 
 bool Details::hasCharacteristic(const Characteristic::UUID & uuid) {
-	return characteristics.find(uuid) != characteristics.end();
+	return characteristics.find(normalizeCharacteristicUUID(uuid)) != characteristics.end();
 }
 
 Characteristic::Details & Details::characteristic(const Characteristic::UUID & uuid) {
-	CharacteristicsMap::iterator iter = characteristics.find(uuid);
+	CharacteristicsMap::iterator iter = characteristics.find(normalizeCharacteristicUUID(uuid));
 	return (*iter).second;
 }
 
 void Details::setNotificationHandler(const Characteristic::UUID & forUUID, Callbacks::IncomingNotification hndler) {
-	notifHandlers[forUUID] = hndler;
+	notifHandlers[normalizeCharacteristicUUID(forUUID)] = hndler;
 }
 
 
